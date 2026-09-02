@@ -2,6 +2,7 @@
   "expo": {
     "name": "Sporgame",
     "slug": "sporgame",
+    "owner": "cominicalzoe",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -17,6 +18,17 @@
       "adaptiveIcon": {
         "backgroundColor": "#121212"
       }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "497f5a0b-26cb-4987-b755-67326c6a0179"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/497f5a0b-26cb-4987-b755-67326c6a0179"
     }
   }
 }
