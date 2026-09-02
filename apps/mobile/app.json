@@ -4,6 +4,7 @@
     "slug": "sporgame",
     "owner": "cominicalzoe",
     "version": "1.0.0",
+    "sdkVersion": "57.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
@@ -25,7 +26,7 @@
       }
     },
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "sdkVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/497f5a0b-26cb-4987-b755-67326c6a0179"
