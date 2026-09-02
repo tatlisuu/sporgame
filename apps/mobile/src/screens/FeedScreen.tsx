@@ -210,12 +210,78 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ activity, onLikeTogg
   );
 };
 
+const DEFAULT_ACTIVITIES: IActivity[] = [
+  {
+    _id: 'seed-act-1',
+    id: 'seed-act-1',
+    title: 'Sabah Sahil Koşusu',
+    sportType: 'RUNNING',
+    user: {
+      _id: 'seed-user-1',
+      username: 'can_demir',
+    },
+    locationString: 'Bebek Sahili, İstanbul',
+    stats: {
+      distance: 6.42,
+      duration: 32,
+      secondaryStat: '4:58 /km',
+    },
+    likes: ['seed-user-2'],
+    likesCount: 24,
+    commentsCount: 5,
+    isLiked: false,
+    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+  },
+  {
+    _id: 'seed-act-2',
+    id: 'seed-act-2',
+    title: 'Boğaz Hattı Bisiklet Turu',
+    sportType: 'CYCLING',
+    user: {
+      _id: 'seed-user-2',
+      username: 'selin_kaya',
+    },
+    locationString: 'Sarıyer - Beşiktaş',
+    stats: {
+      distance: 28.5,
+      duration: 65,
+      secondaryStat: '26.3 km/s',
+    },
+    likes: ['seed-user-1', 'seed-user-3'],
+    likesCount: 42,
+    commentsCount: 9,
+    isLiked: true,
+    createdAt: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
+  },
+  {
+    _id: 'seed-act-3',
+    id: 'seed-act-3',
+    title: 'Kondisyon & Dayanıklılık Yüzüşü',
+    sportType: 'SWIMMING',
+    user: {
+      _id: 'seed-user-3',
+      username: 'mert_yavuz',
+    },
+    locationString: 'Olimpik Havuz, Kadıköy',
+    stats: {
+      distance: 1.8,
+      duration: 40,
+      secondaryStat: '1:42 /100m',
+    },
+    likes: [],
+    likesCount: 17,
+    commentsCount: 2,
+    isLiked: false,
+    createdAt: new Date(Date.now() - 1000 * 60 * 360).toISOString(),
+  },
+];
+
 // ── FeedScreen Component ─────────────────────────────────────────────────────
 
 export function FeedScreen() {
   const { accessToken } = useAuthStore();
-  const [activities, setActivities] = useState<IActivity[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [activities, setActivities] = useState<IActivity[]>(DEFAULT_ACTIVITIES);
+  const [loading, setLoading] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
 
@@ -231,7 +297,7 @@ export function FeedScreen() {
   const fetchFeed = useCallback(async () => {
     try {
       const res = await apiClient.get('/activities');
-      if (res?.data?.data) {
+      if (res?.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
         setActivities(res.data.data);
       }
     } catch (err) {
