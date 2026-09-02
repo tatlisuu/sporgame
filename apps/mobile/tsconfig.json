@@ -3,6 +3,8 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "lib": ["DOM", "ESNext"],
+    "moduleResolution": "bundler",
+    "ignoreDeprecations": "6.0",
     "composite": false,
     "incremental": false,
     "paths": {

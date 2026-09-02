@@ -2,6 +2,8 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
 import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from '../storage/secureStore';
 
+declare const process: { env: Record<string, string | undefined> };
+
 // ── Cloud & Local Configuration ──────────────────────────────────────────────
 // Update this URL with your deployed Render/Railway service URL:
 export const CLOUD_API_URL = 'https://sporgame-api-production.up.railway.app';
