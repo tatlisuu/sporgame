@@ -57,7 +57,7 @@ export function broadcastNewActivity(activity: any): void {
   }
 }
 
-export function broadcastFeedUpdate(payload: { type: 'CREATED' | 'LIKED'; activity: any }): void {
+export function broadcastFeedUpdate(payload: { type: 'CREATED' | 'LIKED' | 'COMMENT_ADDED'; activity: any }): void {
   if (matchmakingNsp) {
     matchmakingNsp.emit('feed_update', payload);
     if (payload.type === 'CREATED') {

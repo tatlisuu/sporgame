@@ -41,3 +41,27 @@ export interface IActivity {
   createdAt: string;
   updatedAt?: string;
 }
+
+export interface IComment {
+  _id: string;
+  id?: string;
+  activityId: string;
+  user: IActivityUser;
+  content: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface IUserProfile {
+  _id: string;
+  id?: string;
+  username: string;
+  email?: string;
+  avatarUrl?: string;
+  followersCount: number;
+  followingCount: number;
+  isFollowing?: boolean;
+  eloProfiles: EloProfiles;
+  recentActivities?: IActivity[];
+  createdAt: string;
+}

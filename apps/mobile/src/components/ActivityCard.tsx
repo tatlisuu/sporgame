@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share } from 'react-native';
 import {
   Flame,
   Bike,
@@ -11,16 +11,22 @@ import {
   Clock,
   Map as MapIcon,
   Navigation,
-  User as UserIcon,
 } from 'lucide-react-native';
 import { IActivity } from '@sporgame/shared';
 
 interface ActivityCardProps {
   activity: IActivity;
   onLikeToggle?: (activityId: string) => void;
+  onCommentPress?: (activityId: string, activityTitle: string) => void;
+  onUserPress?: (userId: string, username: string) => void;
 }
 
-export const ActivityCard: React.FC<ActivityCardProps> = ({ activity, onLikeToggle }) => {
+export const ActivityCard: React.FC<ActivityCardProps> = ({
+  activity,
+  onLikeToggle,
+  onCommentPress,
+  onUserPress,
+}) => {
   const [isLiked, setIsLiked] = useState<boolean>(Boolean(activity.isLiked));
   const [likesCount, setLikesCount] = useState<number>(
     activity.likesCount ?? (Array.isArray(activity.likes) ? activity.likes.length : 0)
@@ -33,6 +39,23 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ activity, onLikeTogg
     const id = activity._id || activity.id;
     if (id && onLikeToggle) {
       onLikeToggle(id);
+    }
+  };
+
+  const handleSharePress = async () => {
+    try {
+      const username = activity.user?.username || 'sporcu';
+      const sportName = getSportName();
+      const distance = activity.stats?.distance ? `${activity.stats.distance} km` : '';
+      const duration = activity.stats?.duration ? `${activity.stats.duration} dk` : '';
+      const message = `@${username}, Sporgame'de ${sportName} antrenmanını tamamladı: ${activity.title}!\n${distance} • ${duration}\nSporgame'e katıl ve rekabete dahil ol!`;
+
+      await Share.share({
+        title: activity.title,
+        message,
+      });
+    } catch (err) {
+      console.log('Share error:', err);
     }
   };
 
@@ -60,51 +83,58 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ activity, onLikeTogg
     }
   };
 
-  const formatDistance = (val?: number) => {
-    if (!val || val === 0) return '0.00 km';
-    if (val >= 1000) return `${(val / 1000).toFixed(2)} km`;
-    return `${val.toFixed(2)} km`;
-  };
-
-  const formatDuration = (mins?: number) => {
-    if (!mins || mins === 0) return '00:00';
-    const totalSecs = Math.round(mins * 60);
-    const m = Math.floor(totalSecs / 60);
-    const s = totalSecs % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
   const formatRelativeTime = (isoString?: string) => {
-    if (!isoString) return 'Yeni';
-    const diffMs = Date.now() - new Date(isoString).getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'Az önce';
-    if (diffMins < 60) return `${diffMins} dk önce`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours} sa önce`;
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays} g önce`;
+    if (!isoString) return 'Az önce';
+    try {
+      const diffMs = Date.now() - new Date(isoString).getTime();
+      const mins = Math.floor(diffMs / 60000);
+      if (mins < 1) return 'Az önce';
+      if (mins < 60) return `${mins} dk önce`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours} sa önce`;
+      const days = Math.floor(hours / 24);
+      return `${days} gün önce`;
+    } catch {
+      return 'Az önce';
+    }
   };
-
-  const distanceText = formatDistance(activity.stats?.distance ?? (activity as any).distance);
-  const durationText = formatDuration(activity.stats?.duration ?? (activity as any).duration);
-  const secondaryText =
-    activity.stats?.secondaryStat ||
-    (activity.sportType === 'RUNNING' ? '5:14 /km' : activity.sportType === 'CYCLING' ? '24.2 km/s' : '1:45 /100m');
 
   const username = activity.user?.username || 'sporcu';
+  const userId = activity.user?._id || '';
   const initial = username.charAt(0).toUpperCase();
+
+  const distanceText = activity.stats?.distance ? `${activity.stats.distance} km` : '--';
+  const durationText = activity.stats?.duration ? `${activity.stats.duration} dk` : '--';
+  const secondaryText =
+    activity.stats?.secondaryStat !== undefined
+      ? activity.stats.secondaryStat
+      : activity.sportType === 'CYCLING'
+      ? '24.5 km/s'
+      : activity.sportType === 'SWIMMING'
+      ? '1:45 /100m'
+      : '5:12 /km';
 
   return (
     <View style={styles.card}>
       {/* 1. Header: User Info & Sport Badge */}
       <View style={styles.headerRow}>
         <View style={styles.userInfo}>
-          <View style={styles.avatar}>
+          <TouchableOpacity
+            style={styles.avatar}
+            onPress={() => onUserPress?.(userId, username)}
+            activeOpacity={0.7}
+          >
             <Text style={styles.avatarText}>{initial || 'S'}</Text>
-          </View>
+          </TouchableOpacity>
+
           <View style={styles.userMeta}>
-            <Text style={styles.username}>@{username}</Text>
+            <TouchableOpacity
+              onPress={() => onUserPress?.(userId, username)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.username}>@{username}</Text>
+            </TouchableOpacity>
+
             <View style={styles.locationTimeRow}>
               <View style={styles.metaItem}>
                 <MapPin size={11} color="#A1A1AA" />
@@ -146,7 +176,11 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ activity, onLikeTogg
 
         <View style={styles.statCol}>
           <Text style={styles.statLabel}>
-            {activity.sportType === 'CYCLING' ? 'Ort. Hız' : activity.sportType === 'SWIMMING' ? 'Tempo' : 'Ort. Tempo'}
+            {activity.sportType === 'CYCLING'
+              ? 'Ort. Hız'
+              : activity.sportType === 'SWIMMING'
+              ? 'Tempo'
+              : 'Ort. Tempo'}
           </Text>
           <Text style={styles.statValue}>{String(secondaryText)}</Text>
         </View>
@@ -168,12 +202,13 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ activity, onLikeTogg
 
       {/* 5. Social Bar */}
       <View style={styles.socialStats}>
-        <Text style={styles.socialCountText}>
-          {likesCount} beğeni
-        </Text>
-        <Text style={styles.socialCountText}>
-          {activity.commentsCount || 0} yorum
-        </Text>
+        <Text style={styles.socialCountText}>{likesCount} beğeni</Text>
+        <TouchableOpacity
+          onPress={() => onCommentPress?.(activity._id || activity.id || '', activity.title)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.socialCountText}>{activity.commentsCount || 0} yorum</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.actionRow}>
@@ -192,12 +227,20 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ activity, onLikeTogg
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => onCommentPress?.(activity._id || activity.id || '', activity.title)}
+          activeOpacity={0.7}
+        >
           <MessageCircle size={18} color="#A1A1AA" />
           <Text style={styles.actionBtnText}>Yorum</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={handleSharePress}
+          activeOpacity={0.7}
+        >
           <Share2 size={18} color="#A1A1AA" />
           <Text style={styles.actionBtnText}>Paylaş</Text>
         </TouchableOpacity>
@@ -209,11 +252,16 @@ export const ActivityCard: React.FC<ActivityCardProps> = ({ activity, onLikeTogg
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#18181B',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#27272A',
     padding: 16,
     marginBottom: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   headerRow: {
     flexDirection: 'row',
@@ -224,42 +272,42 @@ const styles = StyleSheet.create({
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
     flex: 1,
   },
   avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#27272A',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#3F3F46',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
   },
   avatarText: {
-    color: '#F4F4F5',
+    color: '#FAFAFA',
     fontSize: 16,
     fontWeight: '700',
   },
   userMeta: {
-    flex: 1,
+    justifyContent: 'center',
   },
   username: {
     color: '#FAFAFA',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    letterSpacing: 0.2,
   },
   locationTimeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 2,
+    gap: 4,
   },
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   metaText: {
     color: '#A1A1AA',
@@ -267,42 +315,41 @@ const styles = StyleSheet.create({
   },
   metaDot: {
     color: '#52525B',
-    marginHorizontal: 6,
-    fontSize: 12,
+    fontSize: 10,
   },
   sportBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#09090B',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
+    gap: 5,
+    backgroundColor: '#27272A',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#27272A',
+    borderColor: '#3F3F46',
   },
   sportBadgeText: {
-    color: '#D4D4D8',
+    color: '#E4E4E7',
     fontSize: 11,
     fontWeight: '600',
   },
   title: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 0.2,
+    color: '#FAFAFA',
+    fontSize: 16,
+    fontWeight: '700',
     marginBottom: 14,
   },
   statsRow: {
     flexDirection: 'row',
+    backgroundColor: '#09090B',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     alignItems: 'center',
-    backgroundColor: '#121214',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    marginBottom: 14,
+    justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: '#27272A',
+    marginBottom: 14,
   },
   statCol: {
     flex: 1,
@@ -311,15 +358,13 @@ const styles = StyleSheet.create({
   statLabel: {
     color: '#71717A',
     fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-    letterSpacing: 0.5,
+    fontWeight: '500',
+    marginBottom: 2,
   },
   statValue: {
     color: '#FAFAFA',
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   statDivider: {
     width: 1,
@@ -327,13 +372,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#27272A',
   },
   mapPlaceholder: {
-    height: 150,
-    backgroundColor: '#111113',
-    borderRadius: 12,
+    height: 140,
+    backgroundColor: '#09090B',
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#27272A',
-    overflow: 'hidden',
     position: 'relative',
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -344,22 +389,22 @@ const styles = StyleSheet.create({
   },
   radarCircle: {
     position: 'absolute',
-    width: 110,
-    height: 110,
-    borderRadius: 55,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     borderWidth: 1,
-    borderColor: '#27272A',
-    borderStyle: 'dashed',
+    borderColor: 'rgba(244, 63, 94, 0.2)',
+    backgroundColor: 'rgba(244, 63, 94, 0.03)',
   },
   routeIconWrapper: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#18181B',
-    borderWidth: 1,
-    borderColor: '#3F3F46',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(244, 63, 94, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(244, 63, 94, 0.3)',
   },
   mapFooterBadge: {
     position: 'absolute',
@@ -367,18 +412,18 @@ const styles = StyleSheet.create({
     right: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: 'rgba(24, 24, 27, 0.85)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: '#3F3F46',
   },
   mapFooterText: {
-    color: '#E4E4E7',
+    color: '#D4D4D8',
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   socialStats: {
     flexDirection: 'row',
@@ -391,12 +436,10 @@ const styles = StyleSheet.create({
   socialCountText: {
     color: '#71717A',
     fontSize: 12,
-    fontWeight: '500',
   },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
     paddingTop: 4,
   },
   actionBtn: {
@@ -405,7 +448,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 6,
     paddingHorizontal: 12,
-    borderRadius: 8,
+    borderRadius: 6,
   },
   actionBtnText: {
     color: '#A1A1AA',

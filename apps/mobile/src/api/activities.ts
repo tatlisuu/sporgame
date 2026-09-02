@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { IActivity, IActivityStats, IActivityUser, SportType } from '@sporgame/shared';
+import { IActivity, IActivityStats, IActivityUser, IComment, SportType } from '@sporgame/shared';
 
 export type ActivityItem = IActivity;
 
@@ -34,5 +34,15 @@ export async function createActivityApi(data: {
   locationString?: string;
 }): Promise<ActivityItem> {
   const response = await apiClient.post('/activities', data);
+  return response.data.data;
+}
+
+export async function getCommentsApi(activityId: string): Promise<IComment[]> {
+  const response = await apiClient.get(`/activities/${activityId}/comments`);
+  return response.data.data;
+}
+
+export async function addCommentApi(activityId: string, content: string): Promise<IComment> {
+  const response = await apiClient.post(`/activities/${activityId}/comments`, { content });
   return response.data.data;
 }

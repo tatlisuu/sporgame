@@ -39,3 +39,25 @@ export async function remove(req: Request, res: Response, next: NextFunction): P
     next(err);
   }
 }
+
+export async function getComments(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const comments = await activitiesService.getComments(req.params.id);
+    sendSuccess(res, comments);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function addComment(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const comment = await activitiesService.addComment(
+      req.params.id,
+      req.user!.sub,
+      req.body.content,
+    );
+    sendCreated(res, comment, 'Comment added successfully');
+  } catch (err) {
+    next(err);
+  }
+}

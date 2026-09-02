@@ -1,20 +1,38 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../../shared/middleware/authenticate.middleware';
+import * as usersService from './users.service';
+import { sendSuccess } from '../../shared/utils/response';
 
 export const usersRouter = Router();
 
 usersRouter.use(authenticate);
 
-// GET  /api/v1/users/:id        — get public profile
-// GET  /api/v1/users/me         — get own profile
-// PATCH /api/v1/users/me        — update own profile
-// POST /api/v1/users/:id/follow — follow/unfollow
-// GET  /api/v1/users/:id/followers
-// GET  /api/v1/users/:id/following
+// GET  /api/v1/users/me — get own profile
+usersRouter.get('/me', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const profile = await usersService.getUserProfile(req.user!.sub, req.user!.sub);
+    sendSuccess(res, profile);
+  } catch (err) {
+    next(err);
+  }
+});
 
-usersRouter.get('/me',              (_req, res) => res.json({ todo: 'getMe' }));
-usersRouter.patch('/me',            (_req, res) => res.json({ todo: 'updateMe' }));
-usersRouter.get('/:id',             (_req, res) => res.json({ todo: 'getProfile' }));
-usersRouter.post('/:id/follow',     (_req, res) => res.json({ todo: 'toggleFollow' }));
-usersRouter.get('/:id/followers',   (_req, res) => res.json({ todo: 'getFollowers' }));
-usersRouter.get('/:id/following',   (_req, res) => res.json({ todo: 'getFollowing' }));
+// GET  /api/v1/users/:id — get public user profile with recent activities
+usersRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const profile = await usersService.getUserProfile(req.params.id, req.user?.sub);
+    sendSuccess(res, profile);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/v1/users/:id/follow — follow or unfollow
+usersRouter.post('/:id/follow', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await usersService.toggleFollow(req.params.id, req.user!.sub);
+    sendSuccess(res, result);
+  } catch (err) {
+    next(err);
+  }
+});

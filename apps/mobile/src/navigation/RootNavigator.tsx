@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { AuthScreen } from '../screens/AuthScreen';
 import { MainTabNavigator } from './MainTabNavigator';
+import { UserProfileScreen } from '../screens/UserProfileScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -36,7 +37,14 @@ export function RootNavigator() {
         {!isAuthenticated ? (
           <Stack.Screen name="Auth" component={AuthScreen} />
         ) : (
-          <Stack.Screen name="Main" component={MainTabNavigator} />
+          <>
+            <Stack.Screen name="Main" component={MainTabNavigator} />
+            <Stack.Screen
+              name="UserProfile"
+              component={UserProfileScreen}
+              options={{ animation: 'slide_from_right' }}
+            />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

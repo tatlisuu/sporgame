@@ -12,4 +12,6 @@ activitiesRouter.post('/', validate(createActivitySchema, 'body'), activitiesCon
 activitiesRouter.get('/', validate(paginationQuerySchema, 'query'), activitiesController.getFeed);
 activitiesRouter.get('/feed', validate(paginationQuerySchema, 'query'), activitiesController.getFeed);
 activitiesRouter.post('/:id/like', activitiesController.toggleLike);
+activitiesRouter.get('/:id/comments', activitiesController.getComments);
+activitiesRouter.post('/:id/comments', activitiesController.addComment);
 activitiesRouter.delete('/:id', activitiesController.remove);

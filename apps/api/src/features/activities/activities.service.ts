@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import { Activity } from './activity.model';
+import { Comment } from './comment.model';
 import { AppError } from '../../shared/errors/AppError';
 import { HTTP_STATUS } from '@sporgame/shared';
 import { broadcastFeedUpdate, broadcastNewActivity } from '../matchmaking/matchmaking.gateway';
@@ -188,4 +189,88 @@ export async function deleteActivity(
   }
 
   await Activity.findByIdAndDelete(activityId);
+}
+
+export async function getComments(activityId: string): Promise<any[]> {
+  if (!Types.ObjectId.isValid(activityId)) {
+    throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Invalid activity ID', 'INVALID_ID');
+  }
+
+  const comments = await Comment.find({ activityId: new Types.ObjectId(activityId) })
+    .sort({ createdAt: 1 })
+    .populate('userId', '_id username avatarUrl')
+    .lean();
+
+  return comments.map((c: any) => ({
+    _id:        c._id.toString(),
+    id:         c._id.toString(),
+    activityId: c.activityId.toString(),
+    user: {
+      _id:       c.userId?._id?.toString() ?? '',
+      username:  c.userId?.username ?? 'sporcu',
+      avatarUrl: c.userId?.avatarUrl,
+    },
+    content:   c.content,
+    createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : c.createdAt,
+  }));
+}
+
+export async function addComment(
+  activityId: string,
+  userId: string,
+  content: string,
+): Promise<any> {
+  if (!Types.ObjectId.isValid(activityId)) {
+    throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Invalid activity ID', 'INVALID_ID');
+  }
+
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Comment content cannot be empty', 'EMPTY_COMMENT');
+  }
+
+  const activity = await Activity.findByIdAndUpdate(
+    activityId,
+    { $inc: { commentsCount: 1 } },
+    { new: true },
+  );
+
+  if (!activity) {
+    throw new AppError(HTTP_STATUS.NOT_FOUND, 'Activity not found', 'ACTIVITY_NOT_FOUND');
+  }
+
+  const commentDoc = await Comment.create({
+    activityId: new Types.ObjectId(activityId),
+    userId:     new Types.ObjectId(userId),
+    content:    trimmed,
+  });
+
+  const populated = await commentDoc.populate<{ userId: { _id: Types.ObjectId; username: string; avatarUrl?: string } }>(
+    'userId',
+    '_id username avatarUrl',
+  );
+
+  const formattedComment = {
+    _id:        populated._id.toString(),
+    id:         populated._id.toString(),
+    activityId: populated.activityId.toString(),
+    user: {
+      _id:       populated.userId?._id?.toString() ?? '',
+      username:  populated.userId?.username ?? 'sporcu',
+      avatarUrl: populated.userId?.avatarUrl,
+    },
+    content:   populated.content,
+    createdAt: populated.createdAt.toISOString(),
+  };
+
+  broadcastFeedUpdate({
+    type: 'COMMENT_ADDED',
+    activity: {
+      activityId,
+      comment: formattedComment,
+      commentsCount: activity.commentsCount,
+    },
+  });
+
+  return formattedComment;
 }

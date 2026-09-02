@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  SafeAreaView,
 } from 'react-native';
 import {
   Plus,
@@ -19,203 +20,23 @@ import {
   Flame,
   Bike,
   Waves,
-  Heart,
-  MessageCircle,
-  Share2,
-  MapPin,
-  Clock,
-  Map as MapIcon,
-  Navigation,
   Radio,
   Compass,
-  CheckCircle2,
 } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { IActivity, SportType } from '@sporgame/shared';
 import { apiClient } from '../api/client';
 import { useAuthStore } from '../store/authStore';
 import { connectMatchmakingSocket } from '../socket/matchmakingSocket';
-
-// ── Shared Types ─────────────────────────────────────────────────────────────
-
-export interface IActivityStats {
-  distance: number;
-  duration: number;
-  secondaryStat?: string | number;
-}
-
-export interface IActivityUser {
-  _id: string;
-  username: string;
-  avatarUrl?: string;
-  eloProfiles?: Record<string, number>;
-}
-
-export interface IActivity {
-  _id: string;
-  id?: string;
-  user: IActivityUser;
-  title: string;
-  sportType: 'RUNNING' | 'CYCLING' | 'SWIMMING';
-  stats: IActivityStats;
-  locationString?: string;
-  likes: string[];
-  likesCount?: number;
-  commentsCount: number;
-  isLiked?: boolean;
-  createdAt: string;
-}
-
-// ── ActivityCard Component ───────────────────────────────────────────────────
-
-interface ActivityCardProps {
-  activity: IActivity;
-  onLikeToggle?: (activityId: string) => void;
-}
-
-export const ActivityCard: React.FC<ActivityCardProps> = ({ activity, onLikeToggle }) => {
-  const [isLiked, setIsLiked] = useState<boolean>(Boolean(activity.isLiked));
-  const [likesCount, setLikesCount] = useState<number>(
-    activity.likesCount ?? (Array.isArray(activity.likes) ? activity.likes.length : 0)
-  );
-
-  const handleLikePress = () => {
-    const nextState = !isLiked;
-    setIsLiked(nextState);
-    setLikesCount((prev) => (nextState ? prev + 1 : Math.max(0, prev - 1)));
-    const id = activity._id || activity.id;
-    if (id && onLikeToggle) onLikeToggle(id);
-  };
-
-  const getSportIcon = () => {
-    if (activity.sportType === 'CYCLING') return <Bike size={16} color="#38BDF8" />;
-    if (activity.sportType === 'SWIMMING') return <Waves size={16} color="#34D399" />;
-    return <Flame size={16} color="#F43F5E" />;
-  };
-
-  const getSportName = () => {
-    if (activity.sportType === 'CYCLING') return 'Bisiklet';
-    if (activity.sportType === 'SWIMMING') return 'Yüzme';
-    return 'Koşu';
-  };
-
-  const formatDistance = (val?: number) => `${(val ?? 0).toFixed(2)} km`;
-  const formatDuration = (mins?: number) => {
-    const totalSecs = Math.round((mins ?? 0) * 60);
-    const m = Math.floor(totalSecs / 60);
-    const s = totalSecs % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const formatRelativeTime = (isoString?: string) => {
-    if (!isoString) return 'Yeni';
-    const diffMs = Date.now() - new Date(isoString).getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'Az önce';
-    if (diffMins < 60) return `${diffMins} dk önce`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours} sa önce`;
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays} g önce`;
-  };
-
-  const username = activity.user?.username || 'sporcu';
-
-  return (
-    <View style={styles.card}>
-      {/* 1. Header: User Info & Sport Badge */}
-      <View style={styles.headerRow}>
-        <View style={styles.userInfo}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{username.charAt(0).toUpperCase()}</Text>
-          </View>
-          <View style={styles.userMeta}>
-            <Text style={styles.username}>@{username}</Text>
-            <View style={styles.locationTimeRow}>
-              <View style={styles.metaItem}>
-                <MapPin size={11} color="#A1A1AA" />
-                <Text style={styles.metaText}>{activity.locationString || 'Kadıköy, İstanbul'}</Text>
-              </View>
-              <Text style={styles.metaDot}>•</Text>
-              <View style={styles.metaItem}>
-                <Clock size={11} color="#A1A1AA" />
-                <Text style={styles.metaText}>{formatRelativeTime(activity.createdAt)}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.sportBadge}>
-          {getSportIcon()}
-          <Text style={styles.sportBadgeText}>{getSportName()}</Text>
-        </View>
-      </View>
-
-      {/* 2. Activity Title */}
-      <Text style={styles.title}>{activity.title || 'Antrenman Seansı'}</Text>
-
-      {/* 3. 3-Column Stats Row */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCol}>
-          <Text style={styles.statLabel}>Mesafe</Text>
-          <Text style={styles.statValue}>{formatDistance(activity.stats?.distance)}</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statCol}>
-          <Text style={styles.statLabel}>Süre</Text>
-          <Text style={styles.statValue}>{formatDuration(activity.stats?.duration)}</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statCol}>
-          <Text style={styles.statLabel}>
-            {activity.sportType === 'CYCLING' ? 'Ort. Hız' : activity.sportType === 'SWIMMING' ? 'Tempo' : 'Ort. Tempo'}
-          </Text>
-          <Text style={styles.statValue}>{String(activity.stats?.secondaryStat || '5:12 /km')}</Text>
-        </View>
-      </View>
-
-      {/* 4. Map / Route Placeholder View */}
-      <View style={styles.mapPlaceholder}>
-        <View style={styles.radarCircle} />
-        <View style={styles.routeIconWrapper}>
-          <Navigation size={28} color="#F43F5E" />
-        </View>
-        <View style={styles.mapFooterBadge}>
-          <MapIcon size={12} color="#F4F4F5" />
-          <Text style={styles.mapFooterText}>GPS Rotası Doğrulandı</Text>
-        </View>
-      </View>
-
-      {/* 5. Social Action Bar */}
-      <View style={styles.socialStats}>
-        <Text style={styles.socialCountText}>{likesCount} beğeni</Text>
-        <Text style={styles.socialCountText}>{activity.commentsCount || 0} yorum</Text>
-      </View>
-
-      <View style={styles.actionRow}>
-        <TouchableOpacity style={styles.actionBtn} onPress={handleLikePress} activeOpacity={0.7}>
-          <Heart size={18} color={isLiked ? '#F43F5E' : '#A1A1AA'} fill={isLiked ? '#F43F5E' : 'transparent'} />
-          <Text style={[styles.actionBtnText, isLiked && styles.actionBtnTextLiked]}>Beğen</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-          <MessageCircle size={18} color="#A1A1AA" />
-          <Text style={styles.actionBtnText}>Yorum</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-          <Share2 size={18} color="#A1A1AA" />
-          <Text style={styles.actionBtnText}>Paylaş</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
+import { ActivityCard } from '../components/ActivityCard';
+import { CommentsModal } from '../components/CommentsModal';
 
 const DEFAULT_ACTIVITIES: IActivity[] = [
   {
     _id: 'seed-act-1',
     id: 'seed-act-1',
     title: 'Sabah Sahil Koşusu',
-    sportType: 'RUNNING',
+    sportType: SportType.RUNNING,
     user: {
       _id: 'seed-user-1',
       username: 'can_demir',
@@ -236,7 +57,7 @@ const DEFAULT_ACTIVITIES: IActivity[] = [
     _id: 'seed-act-2',
     id: 'seed-act-2',
     title: 'Boğaz Hattı Bisiklet Turu',
-    sportType: 'CYCLING',
+    sportType: SportType.CYCLING,
     user: {
       _id: 'seed-user-2',
       username: 'selin_kaya',
@@ -257,7 +78,7 @@ const DEFAULT_ACTIVITIES: IActivity[] = [
     _id: 'seed-act-3',
     id: 'seed-act-3',
     title: 'Kondisyon & Dayanıklılık Yüzüşü',
-    sportType: 'SWIMMING',
+    sportType: SportType.SWIMMING,
     user: {
       _id: 'seed-user-3',
       username: 'mert_yavuz',
@@ -276,16 +97,20 @@ const DEFAULT_ACTIVITIES: IActivity[] = [
   },
 ];
 
-// ── FeedScreen Component ─────────────────────────────────────────────────────
-
 export function FeedScreen() {
+  const navigation = useNavigation<any>();
   const { accessToken } = useAuthStore();
   const [activities, setActivities] = useState<IActivity[]>(DEFAULT_ACTIVITIES);
   const [loading, setLoading] = useState<boolean>(false);
   const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [createModalVisible, setCreateModalVisible] = useState<boolean>(false);
 
-  // Modal Form State
+  // Comments Modal State
+  const [commentsModalVisible, setCommentsModalVisible] = useState(false);
+  const [activeActivityId, setActiveActivityId] = useState('');
+  const [activeActivityTitle, setActiveActivityTitle] = useState('');
+
+  // Form State
   const [title, setTitle] = useState('');
   const [selectedSport, setSelectedSport] = useState<'RUNNING' | 'CYCLING' | 'SWIMMING'>('RUNNING');
   const [distance, setDistance] = useState('');
@@ -293,7 +118,7 @@ export function FeedScreen() {
   const [locationString, setLocationString] = useState('Kadıköy, İstanbul');
   const [submitting, setSubmitting] = useState(false);
 
-  // Initial Data Fetching via apiClient.get('/activities')
+  // Data Fetching
   const fetchFeed = useCallback(async () => {
     try {
       const res = await apiClient.get('/activities');
@@ -343,6 +168,19 @@ export function FeedScreen() {
             return item;
           })
         );
+      } else if (payload.type === 'COMMENT_ADDED' && payload.activity) {
+        const { activityId, commentsCount } = payload.activity;
+        setActivities((prev) =>
+          prev.map((item) => {
+            if ((item._id || item.id) === activityId) {
+              return {
+                ...item,
+                commentsCount,
+              };
+            }
+            return item;
+          })
+        );
       }
     };
 
@@ -377,6 +215,28 @@ export function FeedScreen() {
     }
   };
 
+  const handleCommentPress = (activityId: string, activityTitle: string) => {
+    setActiveActivityId(activityId);
+    setActiveActivityTitle(activityTitle);
+    setCommentsModalVisible(true);
+  };
+
+  const handleCommentCountUpdate = (activityId: string, newCount: number) => {
+    setActivities((prev) =>
+      prev.map((act) =>
+        (act._id === activityId || act.id === activityId)
+          ? { ...act, commentsCount: newCount }
+          : act
+      )
+    );
+  };
+
+  const handleUserPress = (userId: string, username: string) => {
+    if (userId) {
+      navigation.navigate('UserProfile', { userId, username });
+    }
+  };
+
   const handleCreateActivity = async () => {
     const distNum = parseFloat(distance.replace(',', '.'));
     const durNum = parseFloat(duration.replace(',', '.'));
@@ -407,7 +267,7 @@ export function FeedScreen() {
         setActivities((prev) => [response.data.data, ...prev]);
       }
 
-      setModalVisible(false);
+      setCreateModalVisible(false);
       setTitle('');
       setDistance('');
       setDuration('');
@@ -418,8 +278,17 @@ export function FeedScreen() {
     }
   };
 
+  const renderItem = ({ item }: { item: IActivity }) => (
+    <ActivityCard
+      activity={item}
+      onLikeToggle={handleLikeToggle}
+      onCommentPress={handleCommentPress}
+      onUserPress={handleUserPress}
+    />
+  );
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.feedHeader}>
         <View>
@@ -432,7 +301,7 @@ export function FeedScreen() {
         </View>
       </View>
 
-      {/* Body: Loading or Feed */}
+      {/* Feed List */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#F43F5E" />
@@ -441,9 +310,7 @@ export function FeedScreen() {
         <FlatList
           data={activities}
           keyExtractor={(item) => item._id || item.id || Math.random().toString()}
-          renderItem={({ item }) => (
-            <ActivityCard activity={item} onLikeToggle={handleLikeToggle} />
-          )}
+          renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -469,18 +336,31 @@ export function FeedScreen() {
       {/* Floating Action Button (FAB) */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => setModalVisible(true)}
+        onPress={() => setCreateModalVisible(true)}
         activeOpacity={0.85}
       >
         <Plus size={26} color="#FFFFFF" />
       </TouchableOpacity>
 
-      {/* Create Activity Modal */}
+      {/* Comments Modal */}
+      <CommentsModal
+        visible={commentsModalVisible}
+        activityId={activeActivityId}
+        activityTitle={activeActivityTitle}
+        onClose={() => setCommentsModalVisible(false)}
+        onCommentCountUpdate={handleCommentCountUpdate}
+        onUserPress={(userId, username) => {
+          setCommentsModalVisible(false);
+          handleUserPress(userId, username);
+        }}
+      />
+
+      {/* Activity Creation Modal */}
       <Modal
-        visible={modalVisible}
-        transparent
+        visible={createModalVisible}
         animationType="slide"
-        onRequestClose={() => setModalVisible(false)}
+        transparent={true}
+        onRequestClose={() => setCreateModalVisible(false)}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -488,10 +368,10 @@ export function FeedScreen() {
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>YENİ ANTRENMAN KAYDI</Text>
+              <Text style={styles.modalTitle}>YENİ AKTİVİTE</Text>
               <TouchableOpacity
-                onPress={() => setModalVisible(false)}
-                style={styles.closeBtn}
+                onPress={() => setCreateModalVisible(false)}
+                style={styles.closeButton}
               >
                 <X size={20} color="#A1A1AA" />
               </TouchableOpacity>
@@ -499,23 +379,23 @@ export function FeedScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {/* Sport Selector */}
-              <Text style={styles.inputLabel}>SPOR BRANŞI</Text>
-              <View style={styles.sportSelectRow}>
+              <Text style={styles.fieldLabel}>BRANŞ SEÇİN</Text>
+              <View style={styles.sportSelector}>
                 <TouchableOpacity
                   style={[
-                    styles.sportOption,
-                    selectedSport === 'RUNNING' && styles.sportOptionActive,
+                    styles.sportBtn,
+                    selectedSport === 'RUNNING' && styles.sportBtnActive,
                   ]}
                   onPress={() => setSelectedSport('RUNNING')}
                 >
                   <Flame
                     size={18}
-                    color={selectedSport === 'RUNNING' ? '#F43F5E' : '#71717A'}
+                    color={selectedSport === 'RUNNING' ? '#F43F5E' : '#A1A1AA'}
                   />
                   <Text
                     style={[
-                      styles.sportOptionText,
-                      selectedSport === 'RUNNING' && styles.sportOptionTextActive,
+                      styles.sportBtnText,
+                      selectedSport === 'RUNNING' && styles.sportBtnTextActive,
                     ]}
                   >
                     Koşu
@@ -524,19 +404,19 @@ export function FeedScreen() {
 
                 <TouchableOpacity
                   style={[
-                    styles.sportOption,
-                    selectedSport === 'CYCLING' && styles.sportOptionActive,
+                    styles.sportBtn,
+                    selectedSport === 'CYCLING' && styles.sportBtnActive,
                   ]}
                   onPress={() => setSelectedSport('CYCLING')}
                 >
                   <Bike
                     size={18}
-                    color={selectedSport === 'CYCLING' ? '#F43F5E' : '#71717A'}
+                    color={selectedSport === 'CYCLING' ? '#38BDF8' : '#A1A1AA'}
                   />
                   <Text
                     style={[
-                      styles.sportOptionText,
-                      selectedSport === 'CYCLING' && styles.sportOptionTextActive,
+                      styles.sportBtnText,
+                      selectedSport === 'CYCLING' && styles.sportBtnTextActive,
                     ]}
                   >
                     Bisiklet
@@ -545,19 +425,19 @@ export function FeedScreen() {
 
                 <TouchableOpacity
                   style={[
-                    styles.sportOption,
-                    selectedSport === 'SWIMMING' && styles.sportOptionActive,
+                    styles.sportBtn,
+                    selectedSport === 'SWIMMING' && styles.sportBtnActive,
                   ]}
                   onPress={() => setSelectedSport('SWIMMING')}
                 >
                   <Waves
                     size={18}
-                    color={selectedSport === 'SWIMMING' ? '#F43F5E' : '#71717A'}
+                    color={selectedSport === 'SWIMMING' ? '#34D399' : '#A1A1AA'}
                   />
                   <Text
                     style={[
-                      styles.sportOptionText,
-                      selectedSport === 'SWIMMING' && styles.sportOptionTextActive,
+                      styles.sportBtnText,
+                      selectedSport === 'SWIMMING' && styles.sportBtnTextActive,
                     ]}
                   >
                     Yüzme
@@ -566,36 +446,36 @@ export function FeedScreen() {
               </View>
 
               {/* Title Input */}
-              <Text style={styles.inputLabel}>BAŞLIK</Text>
+              <Text style={styles.fieldLabel}>BAŞLIK</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Örn: Sabah Sahil Temposu"
-                placeholderTextColor="#52525B"
+                placeholder="örn. Sabah Sahil Koşusu"
+                placeholderTextColor="#71717A"
                 value={title}
                 onChangeText={setTitle}
               />
 
-              {/* Distance & Duration Inputs */}
-              <View style={styles.inputRow}>
-                <View style={styles.inputHalf}>
-                  <Text style={styles.inputLabel}>MESAFE (KM)</Text>
+              {/* Metrics Row */}
+              <View style={styles.inputsRow}>
+                <View style={styles.inputCol}>
+                  <Text style={styles.fieldLabel}>MESAFE (KM)</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="5.25"
-                    placeholderTextColor="#52525B"
-                    keyboardType="numeric"
+                    placeholder="0.0"
+                    placeholderTextColor="#71717A"
+                    keyboardType="decimal-pad"
                     value={distance}
                     onChangeText={setDistance}
                   />
                 </View>
 
-                <View style={styles.inputHalf}>
-                  <Text style={styles.inputLabel}>SÜRE (DK)</Text>
+                <View style={styles.inputCol}>
+                  <Text style={styles.fieldLabel}>SÜRE (DK)</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="28"
-                    placeholderTextColor="#52525B"
-                    keyboardType="numeric"
+                    placeholder="0"
+                    placeholderTextColor="#71717A"
+                    keyboardType="number-pad"
                     value={duration}
                     onChangeText={setDuration}
                   />
@@ -603,42 +483,37 @@ export function FeedScreen() {
               </View>
 
               {/* Location Input */}
-              <Text style={styles.inputLabel}>KONUM / GÜZERGAH</Text>
+              <Text style={styles.fieldLabel}>KONUM / GÜZERGAH</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Kadıköy Sahili, İstanbul"
-                placeholderTextColor="#52525B"
+                placeholder="örn. Bebek Sahili, İstanbul"
+                placeholderTextColor="#71717A"
                 value={locationString}
                 onChangeText={setLocationString}
               />
 
               {/* Submit Button */}
               <TouchableOpacity
-                style={[
-                  styles.submitBtn,
-                  (!distance || !duration || submitting) && styles.submitBtnDisabled,
-                ]}
+                style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
                 onPress={handleCreateActivity}
-                disabled={!distance || !duration || submitting}
+                disabled={submitting}
               >
                 {submitting ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <>
-                    <CheckCircle2 size={18} color="#FFFFFF" />
-                    <Text style={styles.submitBtnText}>Kaydet ve Yayınla</Text>
-                  </>
+                  <Text style={styles.submitBtnText}>Aktiviteyi Kaydet</Text>
                 )}
               </TouchableOpacity>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
-// ── Styles ───────────────────────────────────────────────────────────────────
+// Re-export as HomeScreen for backward compatibility
+export const HomeScreen = FeedScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -647,18 +522,16 @@ const styles = StyleSheet.create({
   },
   feedHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 56,
-    paddingBottom: 16,
-    backgroundColor: '#09090B',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#18181B',
+    borderBottomColor: '#27272A',
   },
   headerTitle: {
     color: '#FAFAFA',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0.5,
   },
@@ -673,280 +546,72 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.25)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
   },
   liveText: {
     color: '#10B981',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontSize: 10,
+    fontWeight: '800',
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#09090B',
+    justifyContent: 'center',
   },
   listContent: {
     padding: 16,
-    paddingBottom: 100,
-  },
-  card: {
-    backgroundColor: '#18181B',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#27272A',
-    padding: 16,
-    marginBottom: 16,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#27272A',
-    borderWidth: 1.5,
-    borderColor: '#3F3F46',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  avatarText: {
-    color: '#F4F4F5',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  userMeta: {
-    flex: 1,
-  },
-  username: {
-    color: '#FAFAFA',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  locationTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  metaText: {
-    color: '#A1A1AA',
-    fontSize: 11,
-  },
-  metaDot: {
-    color: '#52525B',
-    marginHorizontal: 6,
-    fontSize: 12,
-  },
-  sportBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#09090B',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#27272A',
-  },
-  sportBadgeText: {
-    color: '#D4D4D8',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-    marginBottom: 14,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#121214',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#27272A',
-  },
-  statCol: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statLabel: {
-    color: '#71717A',
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-    letterSpacing: 0.5,
-  },
-  statValue: {
-    color: '#FAFAFA',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  statDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: '#27272A',
-  },
-  mapPlaceholder: {
-    height: 150,
-    backgroundColor: '#111113',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#27272A',
-    overflow: 'hidden',
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  radarCircle: {
-    position: 'absolute',
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    borderWidth: 1,
-    borderColor: '#27272A',
-    borderStyle: 'dashed',
-  },
-  routeIconWrapper: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#18181B',
-    borderWidth: 1,
-    borderColor: '#3F3F46',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapFooterBadge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(24, 24, 27, 0.85)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#3F3F46',
-  },
-  mapFooterText: {
-    color: '#E4E4E7',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  socialStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#27272A',
-    marginBottom: 8,
-  },
-  socialCountText: {
-    color: '#71717A',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 4,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  actionBtnText: {
-    color: '#A1A1AA',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  actionBtnTextLiked: {
-    color: '#F43F5E',
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 20,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#F43F5E',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#F43F5E',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
-    elevation: 8,
-    zIndex: 99,
+    paddingBottom: 90,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 80,
-    paddingHorizontal: 32,
+    gap: 10,
   },
   emptyTitle: {
-    color: '#D4D4D8',
-    fontSize: 17,
+    color: '#FAFAFA',
+    fontSize: 16,
     fontWeight: '700',
-    marginTop: 16,
-    marginBottom: 6,
+    marginTop: 8,
   },
   emptySubtitle: {
     color: '#71717A',
     fontSize: 13,
     textAlign: 'center',
-    lineHeight: 18,
+    maxWidth: 260,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F43F5E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#F43F5E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: '#18181B',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
     borderWidth: 1,
     borderColor: '#27272A',
-    padding: 24,
     maxHeight: '85%',
   },
   modalHeader: {
@@ -957,11 +622,10 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     color: '#FAFAFA',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
-    letterSpacing: 0.4,
   },
-  closeBtn: {
+  closeButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -969,80 +633,75 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  inputLabel: {
-    color: '#A1A1AA',
-    fontSize: 12,
+  fieldLabel: {
+    color: '#71717A',
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.5,
     marginBottom: 8,
-    marginTop: 6,
+    marginTop: 12,
+    letterSpacing: 0.5,
   },
-  sportSelectRow: {
+  sportSelector: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 16,
+    marginBottom: 10,
   },
-  sportOption: {
+  sportBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: '#121214',
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#09090B',
     borderWidth: 1,
     borderColor: '#27272A',
   },
-  sportOptionActive: {
-    backgroundColor: '#27272A',
+  sportBtnActive: {
     borderColor: '#F43F5E',
+    backgroundColor: 'rgba(244, 63, 94, 0.08)',
   },
-  sportOptionText: {
+  sportBtnText: {
     color: '#71717A',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
-  sportOptionTextActive: {
+  sportBtnTextActive: {
     color: '#FAFAFA',
-    fontWeight: '700',
   },
-  input: {
-    backgroundColor: '#121214',
-    borderWidth: 1,
-    borderColor: '#27272A',
-    borderRadius: 12,
-    color: '#FAFAFA',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    marginBottom: 16,
-  },
-  inputRow: {
+  inputsRow: {
     flexDirection: 'row',
     gap: 12,
   },
-  inputHalf: {
+  inputCol: {
     flex: 1,
   },
+  input: {
+    backgroundColor: '#09090B',
+    borderWidth: 1,
+    borderColor: '#27272A',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    color: '#FAFAFA',
+    fontSize: 14,
+  },
   submitBtn: {
-    flexDirection: 'row',
+    backgroundColor: '#F43F5E',
+    borderRadius: 10,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#F43F5E',
-    paddingVertical: 14,
-    borderRadius: 14,
-    marginTop: 10,
-    marginBottom: 20,
+    marginTop: 24,
+    marginBottom: 10,
   },
   submitBtnDisabled: {
-    opacity: 0.45,
+    opacity: 0.5,
   },
   submitBtnText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    letterSpacing: 0.3,
   },
 });
