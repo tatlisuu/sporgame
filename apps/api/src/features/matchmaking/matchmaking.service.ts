@@ -109,7 +109,7 @@ export async function respondToChallenge(
   if (match.challengedId.toString() !== userId) {
     throw new AppError(HTTP_STATUS.FORBIDDEN, 'Yalnızca meydan okunan sporcu yanıtlayabilir', 'FORBIDDEN');
   }
-  if ((match.status as string) !== 'PENDING') {
+  if (String(match.status) !== 'PENDING') {
     throw new AppError(HTTP_STATUS.CONFLICT, 'Meydan okuma artık beklemede değil', 'INVALID_STATUS');
   }
 
@@ -150,7 +150,7 @@ export async function reportResult(
   if (!participants.includes(dto.winnerId)) {
     throw new AppError(HTTP_STATUS.BAD_REQUEST, 'Kazanan bir katılımcı olmalıdır', 'INVALID_WINNER');
   }
-  if ((match.status as string) !== 'ACCEPTED') {
+  if (String(match.status) !== 'ACCEPTED') {
     throw new AppError(HTTP_STATUS.CONFLICT, 'Maç kabul edilmeden sonuç bildirilemez', 'INVALID_STATUS');
   }
 
