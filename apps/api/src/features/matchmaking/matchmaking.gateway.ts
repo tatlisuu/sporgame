@@ -57,6 +57,15 @@ export function broadcastNewActivity(activity: any): void {
   }
 }
 
+export function broadcastFeedUpdate(payload: { type: 'CREATED' | 'LIKED'; activity: any }): void {
+  if (matchmakingNsp) {
+    matchmakingNsp.emit('feed_update', payload);
+    if (payload.type === 'CREATED') {
+      matchmakingNsp.emit('new_activity', payload.activity);
+    }
+  }
+}
+
 export function initMatchmakingGateway(server: HttpServer): SocketIOServer {
   const io = new SocketIOServer(server, {
     cors: {

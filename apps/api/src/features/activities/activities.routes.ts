@@ -9,6 +9,7 @@ export const activitiesRouter = Router();
 activitiesRouter.use(authenticate);
 
 activitiesRouter.post('/', validate(createActivitySchema, 'body'), activitiesController.create);
+activitiesRouter.get('/', validate(paginationQuerySchema, 'query'), activitiesController.getFeed);
 activitiesRouter.get('/feed', validate(paginationQuerySchema, 'query'), activitiesController.getFeed);
 activitiesRouter.post('/:id/like', activitiesController.toggleLike);
 activitiesRouter.delete('/:id', activitiesController.remove);

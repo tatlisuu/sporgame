@@ -9,52 +9,47 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import {
+  Plus,
+  X,
   Flame,
   Bike,
   Waves,
-  Heart,
-  MessageSquare,
-  Plus,
-  X,
-  CheckCircle2,
-  Clock,
-  Compass,
   Radio,
+  Compass,
+  CheckCircle2,
 } from 'lucide-react-native';
-import { getFeedApi, toggleLikeApi, createActivityApi, ActivityItem } from '../api/activities';
+import { getFeedApi, toggleLikeApi, createActivityApi } from '../api/activities';
+import { ActivityCard } from '../components/ActivityCard';
 import { useAuthStore } from '../store/authStore';
 import { connectMatchmakingSocket } from '../socket/matchmakingSocket';
-
-const sportIcons = {
-  RUNNING: Flame,
-  CYCLING: Bike,
-  SWIMMING: Waves,
-};
-
-const sportColors = {
-  RUNNING: '#F43F5E',
-  CYCLING: '#38BDF8',
-  SWIMMING: '#34D399',
-};
+import { IActivity, SportType } from '@sporgame/shared';
 
 export function FeedScreen() {
   const { accessToken } = useAuthStore();
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [activities, setActivities] = useState<IActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedSport, setSelectedSport] = useState<'RUNNING' | 'CYCLING' | 'SWIMMING'>('RUNNING');
+
+  // Form State
+  const [title, setTitle] = useState('');
+  const [selectedSport, setSelectedSport] = useState<SportType>(SportType.RUNNING);
   const [distance, setDistance] = useState('');
   const [duration, setDuration] = useState('');
+  const [locationString, setLocationString] = useState('Kadıköy, İstanbul');
   const [submitting, setSubmitting] = useState(false);
 
   const fetchFeed = useCallback(async () => {
     try {
-      const response = await getFeedApi(1, 20);
+      const response = await getFeedApi(1, 30);
       setActivities(response.data);
     } catch {
+      // Handled silently
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -65,24 +60,54 @@ export function FeedScreen() {
     fetchFeed();
   }, [fetchFeed]);
 
-  // Real-time Activity Listener
+  // Real-Time Socket Connection & Feed Listeners
   useEffect(() => {
     if (!accessToken) return;
 
     const socket = connectMatchmakingSocket(accessToken);
 
-    const handleNewActivity = (newActivity: ActivityItem) => {
+    const handleFeedUpdate = (payload: any) => {
+      if (!payload) return;
+
+      if (payload.type === 'CREATED' && payload.activity) {
+        setActivities((prev) => {
+          const exists = prev.some(
+            (a) => (a._id || a.id) === (payload.activity._id || payload.activity.id)
+          );
+          if (exists) return prev;
+          return [payload.activity, ...prev];
+        });
+      } else if (payload.type === 'LIKED' && payload.activity) {
+        const { activityId, likesCount, isLiked } = payload.activity;
+        setActivities((prev) =>
+          prev.map((item) => {
+            if ((item._id || item.id) === activityId) {
+              return {
+                ...item,
+                likesCount,
+                isLiked: isLiked !== undefined ? isLiked : item.isLiked,
+              };
+            }
+            return item;
+          })
+        );
+      }
+    };
+
+    const handleNewActivity = (newAct: any) => {
+      if (!newAct) return;
       setActivities((prev) => {
-        if (prev.some((item) => item.id === newActivity.id)) {
-          return prev;
-        }
-        return [newActivity, ...prev];
+        const exists = prev.some((a) => (a._id || a.id) === (newAct._id || newAct.id));
+        if (exists) return prev;
+        return [newAct, ...prev];
       });
     };
 
+    socket.on('feed_update', handleFeedUpdate);
     socket.on('new_activity', handleNewActivity);
 
     return () => {
+      socket.off('feed_update', handleFeedUpdate);
       socket.off('new_activity', handleNewActivity);
     };
   }, [accessToken]);
@@ -92,168 +117,68 @@ export function FeedScreen() {
     fetchFeed();
   };
 
-  const handleLike = async (item: ActivityItem) => {
-    const prevLiked = item.isLiked;
-    const prevCount = item.likesCount;
-
-    setActivities((prev) =>
-      prev.map((act) =>
-        act.id === item.id
-          ? {
-              ...act,
-              isLiked: !prevLiked,
-              likesCount: prevLiked ? prevCount - 1 : prevCount + 1,
-            }
-          : act
-      )
-    );
-
+  const handleLikeToggle = async (activityId: string) => {
     try {
-      const res = await toggleLikeApi(item.id);
-      setActivities((prev) =>
-        prev.map((act) =>
-          act.id === item.id
-            ? { ...act, isLiked: res.isLiked, likesCount: res.likesCount }
-            : act
-        )
-      );
+      await toggleLikeApi(activityId);
     } catch {
-      setActivities((prev) =>
-        prev.map((act) =>
-          act.id === item.id
-            ? { ...act, isLiked: prevLiked, likesCount: prevCount }
-            : act
-        )
-      );
+      // Revert if error
+      fetchFeed();
     }
   };
 
   const handleCreateActivity = async () => {
-    if (!distance || !duration) return;
+    const distNum = parseFloat(distance.replace(',', '.'));
+    const durNum = parseFloat(duration.replace(',', '.'));
+
+    if (isNaN(distNum) || isNaN(durNum) || distNum <= 0 || durNum <= 0) {
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await createActivityApi({
+      const paceText =
+        selectedSport === SportType.RUNNING
+          ? `${(durNum / distNum).toFixed(2).replace('.', ':')} /km`
+          : selectedSport === SportType.CYCLING
+          ? `${((distNum / durNum) * 60).toFixed(1)} km/s`
+          : '1:45 /100m';
+
+      const newAct = await createActivityApi({
+        title: title.trim() || undefined,
         sportType: selectedSport,
-        distance: parseFloat(distance) * 1000,
-        duration: parseFloat(duration) * 60,
+        distance: distNum,
+        duration: durNum,
+        secondaryStat: paceText,
+        locationString: locationString.trim() || 'Kadıköy, İstanbul',
       });
+
+      setActivities((prev) => [newAct, ...prev]);
+      setModalVisible(false);
+      setTitle('');
       setDistance('');
       setDuration('');
-      setModalVisible(false);
     } catch {
+      // Handled silently
     } finally {
       setSubmitting(false);
     }
   };
 
-  const formatDistance = (meters: number) => `${(meters / 1000).toFixed(2)} km`;
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  };
-
-  const renderActivity = ({ item }: { item: ActivityItem }) => {
-    const SportIcon = sportIcons[item.sportType] || Flame;
-    const accentColor = sportColors[item.sportType] || '#F43F5E';
-    const authorUsername = item.user.username || 'sporcu';
-
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.userInfo}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>
-                {authorUsername.slice(0, 2).toUpperCase()}
-              </Text>
-            </View>
-            <View>
-              <Text style={styles.authorName}>@{authorUsername}</Text>
-              <Text style={styles.timeText}>
-                {new Date(item.createdAt).toLocaleDateString()}
-              </Text>
-            </View>
-          </View>
-
-          <View style={[styles.sportTag, { borderColor: accentColor }]}>
-            <SportIcon size={14} color={accentColor} />
-            <Text style={[styles.sportTagText, { color: accentColor }]}>
-              {item.sportType}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.statsGrid}>
-          <View style={styles.statBox}>
-            <View style={styles.statLabelRow}>
-              <Compass size={13} color="#71717A" />
-              <Text style={styles.statLabel}>Mesafe</Text>
-            </View>
-            <Text style={styles.statValue}>{formatDistance(item.distance)}</Text>
-          </View>
-
-          <View style={styles.statBox}>
-            <View style={styles.statLabelRow}>
-              <Clock size={13} color="#71717A" />
-              <Text style={styles.statLabel}>Süre</Text>
-            </View>
-            <Text style={styles.statValue}>{formatDuration(item.duration)}</Text>
-          </View>
-        </View>
-
-        <View style={styles.cardFooter}>
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => handleLike(item)}
-            activeOpacity={0.7}
-          >
-            <Heart
-              size={18}
-              color={item.isLiked ? '#F43F5E' : '#71717A'}
-              fill={item.isLiked ? '#F43F5E' : 'none'}
-            />
-            <Text
-              style={[
-                styles.actionText,
-                item.isLiked && { color: '#F43F5E', fontWeight: '700' },
-              ]}
-            >
-              {item.likesCount}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionBtn} activeOpacity={0.7}>
-            <MessageSquare size={18} color="#71717A" />
-            <Text style={styles.actionText}>{item.commentsCount}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  };
-
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
+      {/* Top Header */}
+      <View style={styles.header}>
         <View>
-          <View style={styles.titleRow}>
-            <Text style={styles.screenTitle}>ANASAYFA</Text>
-            <View style={styles.liveIndicator}>
-              <Radio size={12} color="#22C55E" />
-              <Text style={styles.liveIndicatorText}>CANLI</Text>
-            </View>
-          </View>
-          <Text style={styles.screenSubtitle}>Global Aktivite Akışı</Text>
+          <Text style={styles.headerTitle}>TOPLULUK AKIŞI</Text>
+          <Text style={styles.headerSubtitle}>Gerçek Zamanlı Sporcu Aktiviteleri</Text>
         </View>
-
-        <TouchableOpacity
-          style={styles.newPostBtn}
-          onPress={() => setModalVisible(true)}
-        >
-          <Plus size={18} color="#FFFFFF" />
-          <Text style={styles.newPostBtnText}>Kaydet</Text>
-        </TouchableOpacity>
+        <View style={styles.liveIndicator}>
+          <Radio size={12} color="#10B981" />
+          <Text style={styles.liveText}>CANLI</Text>
+        </View>
       </View>
 
+      {/* Feed List */}
       {loading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#F43F5E" />
@@ -261,108 +186,199 @@ export function FeedScreen() {
       ) : (
         <FlatList
           data={activities}
-          renderItem={renderActivity}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item._id || item.id || Math.random().toString()}
+          renderItem={({ item }) => (
+            <ActivityCard activity={item} onLikeToggle={handleLikeToggle} />
+          )}
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor="#F43F5E"
+              colors={['#F43F5E']}
             />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
+              <Compass size={44} color="#3F3F46" />
               <Text style={styles.emptyTitle}>Henüz Aktivite Yok</Text>
               <Text style={styles.emptySubtitle}>
-                İlk antrenmanınızı kaydedin veya sporcuları takip edin.
+                Aşağıdaki kırmızı artı butonuna basarak ilk Strava antrenmanınızı kaydedin.
               </Text>
             </View>
           }
         />
       )}
 
-      {/* New Activity Modal */}
-      <Modal visible={modalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      {/* Floating Action Button (FAB) */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setModalVisible(true)}
+        activeOpacity={0.85}
+      >
+        <Plus size={26} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      {/* Create Activity Modal */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Aktivite Kaydet</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <Text style={styles.modalTitle}>YENİ ANTRENMAN KAYDI</Text>
+              <TouchableOpacity
+                onPress={() => setModalVisible(false)}
+                style={styles.closeBtn}
+              >
                 <X size={20} color="#A1A1AA" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.sportSelectRow}>
-              {(['RUNNING', 'CYCLING', 'SWIMMING'] as const).map((sport) => {
-                const Icon = sportIcons[sport];
-                const isSelected = selectedSport === sport;
-                return (
-                  <TouchableOpacity
-                    key={sport}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Sport Selector */}
+              <Text style={styles.inputLabel}>SPOR BRANŞI</Text>
+              <View style={styles.sportSelectRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.sportOption,
+                    selectedSport === SportType.RUNNING && styles.sportOptionActive,
+                  ]}
+                  onPress={() => setSelectedSport(SportType.RUNNING)}
+                >
+                  <Flame
+                    size={18}
+                    color={selectedSport === SportType.RUNNING ? '#F43F5E' : '#71717A'}
+                  />
+                  <Text
                     style={[
-                      styles.sportOption,
-                      isSelected && styles.sportOptionActive,
+                      styles.sportOptionText,
+                      selectedSport === SportType.RUNNING && styles.sportOptionTextActive,
                     ]}
-                    onPress={() => setSelectedSport(sport)}
                   >
-                    <Icon
-                      size={16}
-                      color={isSelected ? '#FFFFFF' : '#71717A'}
-                    />
-                    <Text
-                      style={[
-                        styles.sportOptionText,
-                        isSelected && styles.sportOptionTextActive,
-                      ]}
-                    >
-                      {sport}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                    Koşu
+                  </Text>
+                </TouchableOpacity>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Mesafe (Kilometre)</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.sportOption,
+                    selectedSport === SportType.CYCLING && styles.sportOptionActive,
+                  ]}
+                  onPress={() => setSelectedSport(SportType.CYCLING)}
+                >
+                  <Bike
+                    size={18}
+                    color={selectedSport === SportType.CYCLING ? '#F43F5E' : '#71717A'}
+                  />
+                  <Text
+                    style={[
+                      styles.sportOptionText,
+                      selectedSport === SportType.CYCLING && styles.sportOptionTextActive,
+                    ]}
+                  >
+                    Bisiklet
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.sportOption,
+                    selectedSport === SportType.SWIMMING && styles.sportOptionActive,
+                  ]}
+                  onPress={() => setSelectedSport(SportType.SWIMMING)}
+                >
+                  <Waves
+                    size={18}
+                    color={selectedSport === SportType.SWIMMING ? '#F43F5E' : '#71717A'}
+                  />
+                  <Text
+                    style={[
+                      styles.sportOptionText,
+                      selectedSport === SportType.SWIMMING && styles.sportOptionTextActive,
+                    ]}
+                  >
+                    Yüzme
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Title Input */}
+              <Text style={styles.inputLabel}>BAŞLIK</Text>
               <TextInput
-                style={styles.modalInput}
-                placeholder="Örn: 5.2"
-                placeholderTextColor="#71717A"
-                keyboardType="decimal-pad"
-                value={distance}
-                onChangeText={setDistance}
+                style={styles.input}
+                placeholder="Örn: Sabah Sahil Temposu"
+                placeholderTextColor="#52525B"
+                value={title}
+                onChangeText={setTitle}
               />
-            </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Süre (Dakika)</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Örn: 28"
-                placeholderTextColor="#71717A"
-                keyboardType="numeric"
-                value={duration}
-                onChangeText={setDuration}
-              />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.saveBtn, submitting && { opacity: 0.6 }]}
-              onPress={handleCreateActivity}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <View style={styles.btnRow}>
-                  <CheckCircle2 size={18} color="#FFFFFF" />
-                  <Text style={styles.saveBtnText}>Aktiviteyi Kaydet</Text>
+              {/* Distance & Duration Inputs */}
+              <View style={styles.inputRow}>
+                <View style={styles.inputHalf}>
+                  <Text style={styles.inputLabel}>MESAFE (KM)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="5.25"
+                    placeholderTextColor="#52525B"
+                    keyboardType="numeric"
+                    value={distance}
+                    onChangeText={setDistance}
+                  />
                 </View>
-              )}
-            </TouchableOpacity>
+
+                <View style={styles.inputHalf}>
+                  <Text style={styles.inputLabel}>SÜRE (DK)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="28"
+                    placeholderTextColor="#52525B"
+                    keyboardType="numeric"
+                    value={duration}
+                    onChangeText={setDuration}
+                  />
+                </View>
+              </View>
+
+              {/* Location Input */}
+              <Text style={styles.inputLabel}>KONUM / GÜZERGAH</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Kadıköy Sahili, İstanbul"
+                placeholderTextColor="#52525B"
+                value={locationString}
+                onChangeText={setLocationString}
+              />
+
+              {/* Submit Button */}
+              <TouchableOpacity
+                style={[
+                  styles.submitBtn,
+                  (!distance || !duration || submitting) && styles.submitBtnDisabled,
+                ]}
+                onPress={handleCreateActivity}
+                disabled={!distance || !duration || submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <CheckCircle2 size={18} color="#FFFFFF" />
+                    <Text style={styles.submitBtnText}>Kaydet ve Yayınla</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -373,202 +389,104 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#09090B',
   },
-  topBar: {
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 56,
     paddingBottom: 16,
+    backgroundColor: '#09090B',
     borderBottomWidth: 1,
     borderBottomColor: '#18181B',
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  screenTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 1.5,
+  headerTitle: {
     color: '#FAFAFA',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  headerSubtitle: {
+    color: '#71717A',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
   },
   liveIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(34, 197, 94, 0.12)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    gap: 4,
-  },
-  liveIndicatorText: {
-    color: '#22C55E',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  screenSubtitle: {
-    fontSize: 12,
-    color: '#71717A',
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  newPostBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F43F5E',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
     gap: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
   },
-  newPostBtnText: {
-    color: '#FFFFFF',
+  liveText: {
+    color: '#10B981',
+    fontSize: 11,
     fontWeight: '700',
-    fontSize: 13,
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 32,
+    letterSpacing: 0.5,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  card: {
-    backgroundColor: '#18181B',
-    borderRadius: 14,
+  listContent: {
     padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#27272A',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  avatarCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#27272A',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#3F3F46',
-  },
-  avatarInitials: {
-    color: '#FAFAFA',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  authorName: {
-    color: '#FAFAFA',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  timeText: {
-    color: '#71717A',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  sportTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    gap: 5,
-  },
-  sportTagText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    backgroundColor: '#111114',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 14,
-    gap: 12,
-  },
-  statBox: {
-    flex: 1,
-  },
-  statLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 4,
-  },
-  statLabel: {
-    color: '#71717A',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  statValue: {
-    color: '#FAFAFA',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#27272A',
-    paddingTop: 12,
-    gap: 20,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  actionText: {
-    color: '#A1A1AA',
-    fontSize: 13,
-    fontWeight: '600',
+    paddingBottom: 100,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 64,
+    paddingVertical: 80,
+    paddingHorizontal: 32,
   },
   emptyTitle: {
-    color: '#FAFAFA',
-    fontSize: 16,
+    color: '#D4D4D8',
+    fontSize: 17,
     fontWeight: '700',
+    marginTop: 16,
     marginBottom: 6,
   },
   emptySubtitle: {
     color: '#71717A',
     fontSize: 13,
     textAlign: 'center',
-    maxWidth: 260,
+    lineHeight: 18,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#F43F5E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#F43F5E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 99,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: '#18181B',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     borderWidth: 1,
     borderColor: '#27272A',
+    padding: 24,
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -577,70 +495,93 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
     color: '#FAFAFA',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#27272A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inputLabel: {
+    color: '#A1A1AA',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginTop: 6,
   },
   sportSelectRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
+    gap: 10,
+    marginBottom: 16,
   },
   sportOption: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#27272A',
-    paddingVertical: 10,
-    borderRadius: 8,
     gap: 6,
+    backgroundColor: '#121214',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#27272A',
   },
   sportOptionActive: {
-    backgroundColor: '#F43F5E',
+    backgroundColor: '#27272A',
+    borderColor: '#F43F5E',
   },
   sportOptionText: {
-    color: '#A1A1AA',
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#71717A',
+    fontSize: 13,
+    fontWeight: '600',
   },
   sportOptionTextActive: {
-    color: '#FFFFFF',
+    color: '#FAFAFA',
+    fontWeight: '700',
   },
-  inputGroup: {
+  input: {
+    backgroundColor: '#121214',
+    borderWidth: 1,
+    borderColor: '#27272A',
+    borderRadius: 12,
+    color: '#FAFAFA',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
     marginBottom: 16,
   },
-  inputLabel: {
-    color: '#A1A1AA',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 6,
+  inputRow: {
+    flexDirection: 'row',
+    gap: 12,
   },
-  modalInput: {
-    backgroundColor: '#09090B',
-    borderWidth: 1,
-    borderColor: '#3F3F46',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#FAFAFA',
-    fontSize: 14,
+  inputHalf: {
+    flex: 1,
   },
-  saveBtn: {
-    backgroundColor: '#F43F5E',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  btnRow: {
+  submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
+    backgroundColor: '#F43F5E',
+    paddingVertical: 14,
+    borderRadius: 14,
+    marginTop: 10,
+    marginBottom: 20,
   },
-  saveBtnText: {
+  submitBtnDisabled: {
+    opacity: 0.45,
+  },
+  submitBtnText: {
     color: '#FFFFFF',
-    fontWeight: '800',
     fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
 });

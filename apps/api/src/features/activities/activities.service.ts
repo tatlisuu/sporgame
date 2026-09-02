@@ -2,7 +2,7 @@ import { Types } from 'mongoose';
 import { Activity } from './activity.model';
 import { AppError } from '../../shared/errors/AppError';
 import { HTTP_STATUS } from '@sporgame/shared';
-import { broadcastNewActivity } from '../matchmaking/matchmaking.gateway';
+import { broadcastFeedUpdate, broadcastNewActivity } from '../matchmaking/matchmaking.gateway';
 import type { CreateActivityDto, PaginationQueryDto, ActivityResponseDto, AuthorPublicDto } from './activities.dto';
 
 function mapToResponseDto(doc: any, currentUserId?: string): ActivityResponseDto {
@@ -10,29 +10,44 @@ function mapToResponseDto(doc: any, currentUserId?: string): ActivityResponseDto
     ? {
         _id:         doc.userId._id.toString(),
         username:    doc.userId.username,
+        avatarUrl:   doc.userId.avatarUrl,
         eloProfiles: doc.userId.eloProfiles,
       }
     : {
         _id:         doc.userId?.toString() ?? '',
-        username:    '',
+        username:    'Sporcu',
         eloProfiles: {},
       };
 
   const likesArray = Array.isArray(doc.likes) ? doc.likes : [];
-  const isLiked = currentUserId
-    ? likesArray.some((id: Types.ObjectId | string) => id.toString() === currentUserId)
-    : false;
+  const likesStr = likesArray.map((id: any) => id.toString());
+  const isLiked = currentUserId ? likesStr.includes(currentUserId) : false;
+
+  const stats = doc.stats || {
+    distance:      doc.distance || 0,
+    duration:      doc.duration || 0,
+    secondaryStat: '',
+  };
 
   return {
-    id:            doc._id.toString(),
-    user:          author,
-    sportType:     doc.sportType,
-    distance:      doc.distance,
-    duration:      doc.duration,
-    likesCount:    doc.likesCount,
-    commentsCount: doc.commentsCount,
+    _id:            doc._id.toString(),
+    id:             doc._id.toString(),
+    user:           author,
+    title:          doc.title || (doc.sportType === 'RUNNING' ? 'Sabah Koşusu' : doc.sportType === 'CYCLING' ? 'Şehir Sürüşü' : 'Yüzme Seansı'),
+    sportType:      doc.sportType,
+    stats:          {
+      distance:      stats.distance ?? doc.distance ?? 0,
+      duration:      stats.duration ?? doc.duration ?? 0,
+      secondaryStat: stats.secondaryStat ?? (doc.sportType === 'RUNNING' ? '5:12 /km' : '25 km/s'),
+    },
+    distance:       doc.distance ?? stats.distance ?? 0,
+    duration:       doc.duration ?? stats.duration ?? 0,
+    locationString: doc.locationString || 'Kadıköy, İstanbul',
+    likes:          likesStr,
+    likesCount:     doc.likesCount ?? likesStr.length,
+    commentsCount:  doc.commentsCount || 0,
     isLiked,
-    createdAt:     doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
+    createdAt:      doc.createdAt instanceof Date ? doc.createdAt.toISOString() : doc.createdAt,
   };
 }
 
@@ -40,19 +55,32 @@ export async function createActivity(
   userId: string,
   dto: CreateActivityDto,
 ): Promise<ActivityResponseDto> {
+  const defaultTitle = dto.sportType === 'RUNNING' ? 'Sabah Koşusu' : dto.sportType === 'CYCLING' ? 'Şehir Sürüşü' : 'Kondisyon Yüzüşü';
+  const defaultPace = dto.sportType === 'RUNNING' ? '5:12 /km' : dto.sportType === 'CYCLING' ? '26.4 km/s' : '1:45 /100m';
+
+  const stats = {
+    distance:      dto.distance,
+    duration:      dto.duration,
+    secondaryStat: dto.secondaryStat || defaultPace,
+  };
+
   const created = await Activity.create({
-    userId:    new Types.ObjectId(userId),
-    sportType: dto.sportType,
-    distance:  dto.distance,
-    duration:  dto.duration,
+    userId:         new Types.ObjectId(userId),
+    title:          dto.title || defaultTitle,
+    sportType:      dto.sportType,
+    stats,
+    distance:       dto.distance,
+    duration:       dto.duration,
+    locationString: dto.locationString || 'Kadıköy, İstanbul',
   });
 
-  const populated = await created.populate<{ userId: { _id: Types.ObjectId; username: string; eloProfiles: Record<string, number> } }>(
+  const populated = await created.populate<{ userId: { _id: Types.ObjectId; username: string; avatarUrl?: string; eloProfiles: Record<string, number> } }>(
     'userId',
-    '_id username eloProfiles',
+    '_id username avatarUrl eloProfiles',
   );
 
   const dtoResult = mapToResponseDto(populated, userId);
+  broadcastFeedUpdate({ type: 'CREATED', activity: dtoResult });
   broadcastNewActivity(dtoResult);
   return dtoResult;
 }
@@ -74,7 +102,7 @@ export async function getFeed(
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(query.limit)
-      .populate('userId', '_id username eloProfiles')
+      .populate('userId', '_id username avatarUrl eloProfiles')
       .lean(),
     Activity.countDocuments(),
   ]);
@@ -109,7 +137,12 @@ export async function toggleLike(
   );
 
   if (unliked) {
-    return { isLiked: false, likesCount: Math.max(0, unliked.likesCount) };
+    const likesCount = Math.max(0, unliked.likesCount);
+    broadcastFeedUpdate({
+      type: 'LIKED',
+      activity: { activityId, isLiked: false, likesCount, userId },
+    });
+    return { isLiked: false, likesCount };
   }
 
   // Atomically add like if user ID does not exist in likes
@@ -129,7 +162,12 @@ export async function toggleLike(
     }
   }
 
-  return { isLiked: true, likesCount: liked ? liked.likesCount : 0 };
+  const likesCount = liked ? liked.likesCount : 0;
+  broadcastFeedUpdate({
+    type: 'LIKED',
+    activity: { activityId, isLiked: true, likesCount, userId },
+  });
+  return { isLiked: true, likesCount };
 }
 
 export async function deleteActivity(

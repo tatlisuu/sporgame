@@ -1,20 +1,7 @@
 import { apiClient } from './client';
+import { IActivity, IActivityStats, IActivityUser, SportType } from '@sporgame/shared';
 
-export interface ActivityItem {
-  id: string;
-  user: {
-    _id: string;
-    username: string;
-    eloProfiles?: Record<string, number>;
-  };
-  sportType: 'RUNNING' | 'CYCLING' | 'SWIMMING';
-  distance: number;
-  duration: number;
-  likesCount: number;
-  commentsCount: number;
-  isLiked?: boolean;
-  createdAt: string;
-}
+export type ActivityItem = IActivity;
 
 export interface FeedResponse {
   data: ActivityItem[];
@@ -25,7 +12,7 @@ export interface FeedResponse {
 }
 
 export async function getFeedApi(page = 1, limit = 20): Promise<FeedResponse> {
-  const response = await apiClient.get('/activities/feed', {
+  const response = await apiClient.get('/activities', {
     params: { page, limit },
   });
   return response.data.data;
@@ -39,9 +26,12 @@ export async function toggleLikeApi(
 }
 
 export async function createActivityApi(data: {
-  sportType: 'RUNNING' | 'CYCLING' | 'SWIMMING';
+  title?: string;
+  sportType: SportType | 'RUNNING' | 'CYCLING' | 'SWIMMING';
   distance: number;
   duration: number;
+  secondaryStat?: string | number;
+  locationString?: string;
 }): Promise<ActivityItem> {
   const response = await apiClient.post('/activities', data);
   return response.data.data;

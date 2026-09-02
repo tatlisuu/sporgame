@@ -1,10 +1,14 @@
 import { z } from 'zod';
+import { IActivityStats, IActivityUser } from '@sporgame/shared';
 
 export const createActivitySchema = z
   .object({
-    sportType: z.enum(['RUNNING', 'CYCLING', 'SWIMMING']),
-    distance:  z.number().positive('Distance must be greater than 0'),
-    duration:  z.number().positive('Duration must be greater than 0'),
+    title:          z.string().min(1).max(100).optional(),
+    sportType:      z.enum(['RUNNING', 'CYCLING', 'SWIMMING']),
+    distance:       z.number().min(0, 'Distance must be positive'),
+    duration:       z.number().min(0, 'Duration must be positive'),
+    secondaryStat:  z.union([z.string(), z.number()]).optional(),
+    locationString: z.string().max(100).optional(),
   })
   .strict();
 
@@ -19,20 +23,21 @@ export const paginationQuerySchema = z
 
 export type PaginationQueryDto = z.infer<typeof paginationQuerySchema>;
 
-export interface AuthorPublicDto {
-  _id:         string;
-  username:    string;
-  eloProfiles: Record<string, number>;
-}
+export interface AuthorPublicDto extends IActivityUser {}
 
 export interface ActivityResponseDto {
-  id:            string;
-  user:          AuthorPublicDto;
-  sportType:     string;
-  distance:      number;
-  duration:      number;
-  likesCount:    number;
-  commentsCount: number;
-  isLiked?:      boolean;
-  createdAt:     string;
+  _id:            string;
+  id:             string;
+  user:           AuthorPublicDto;
+  title:          string;
+  sportType:      string;
+  stats:          IActivityStats;
+  distance:       number;
+  duration:       number;
+  locationString: string;
+  likes:          string[];
+  likesCount:     number;
+  commentsCount:  number;
+  isLiked?:       boolean;
+  createdAt:      string;
 }

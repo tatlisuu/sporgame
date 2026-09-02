@@ -12,3 +12,32 @@ export enum MatchStatus {
 }
 
 export type EloProfiles = Record<SportType, number>;
+
+export interface IActivityStats {
+  distance: number;
+  duration: number;
+  secondaryStat?: string | number;
+}
+
+export interface IActivityUser {
+  _id: string;
+  username: string;
+  avatarUrl?: string;
+  eloProfiles?: Record<string, number>;
+}
+
+export interface IActivity {
+  _id: string;
+  id?: string;
+  user: IActivityUser;
+  title: string;
+  sportType: SportType;
+  stats: IActivityStats;
+  locationString?: string;
+  likes: string[];
+  likesCount?: number;
+  commentsCount: number;
+  isLiked?: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}

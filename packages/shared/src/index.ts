@@ -1,5 +1,6 @@
 export * from './constants';
 export * from './types';
+import { SportType } from './types';
 
 // ─── Primitive Scalars ───────────────────────────────────────────────────────
 
@@ -50,16 +51,6 @@ export interface JwtPayload {
   iat?:  number;
   exp?:  number;
 }
-
-// ─── Users ───────────────────────────────────────────────────────────────────
-
-export type SportType =
-  | 'football'
-  | 'basketball'
-  | 'tennis'
-  | 'padel'
-  | 'volleyball'
-  | 'badminton';
 
 export interface UserSportProfile {
   sport:  SportType;
