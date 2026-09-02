@@ -38,6 +38,15 @@ export function globalErrorHandler(
   // Unknown programmer error — log internally, never expose stack to client
   console.error(`[${new Date().toISOString()}] UNHANDLED ERROR on ${req.method} ${req.path}:`, err);
 
+  if (err.name === 'MongooseError' && err.message.includes('buffering timed out')) {
+    res.status(503).json({
+      success: false,
+      error: 'Veritabanı bağlantısı zaman aşımına uğradı. MongoDB Atlas Network Access (IP Whitelist 0.0.0.0/0) iznini kontrol edin.',
+      code: 'DATABASE_UNAVAILABLE',
+    });
+    return;
+  }
+
   res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
     success: false,
     error:   'An unexpected error occurred',

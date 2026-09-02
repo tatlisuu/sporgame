@@ -4,7 +4,7 @@ import { getAccessToken, getRefreshToken, saveTokens, clearTokens } from '../sto
 
 // ── Cloud & Local Configuration ──────────────────────────────────────────────
 // Update this URL with your deployed Render/Railway service URL:
-export const CLOUD_API_URL = 'https://sporgame-api.onrender.com';
+export const CLOUD_API_URL = 'https://sporgame-api-production.up.railway.app';
 
 const LOCAL_DEV_URL = Platform.select({
   web: 'http://localhost:3000',
@@ -13,7 +13,7 @@ const LOCAL_DEV_URL = Platform.select({
 
 // Set to true to route all mobile traffic to Cloud, or false for local dev.
 // In production builds (__DEV__ === false), it defaults to CLOUD_API_URL.
-export const USE_CLOUD_API = false;
+export const USE_CLOUD_API = true;
 
 export const API_HOST =
   process.env.EXPO_PUBLIC_API_URL ||

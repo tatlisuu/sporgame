@@ -5,6 +5,7 @@ import { env }     from './config/env';
 import { applySecurityMiddleware } from './shared/middleware/security.middleware';
 import { apiRouter }               from './routes';
 import { globalErrorHandler, notFoundHandler } from './shared/errors/AppError';
+import { getDatabaseStatus } from './config/database';
 
 export function createApp(): Application {
   const app = express();
@@ -24,9 +25,15 @@ export function createApp(): Application {
     app.use(morgan(env.NODE_ENV === 'development' ? 'dev' : 'combined'));
   }
 
-  // ── Health check (unauthenticated — no sensitive data) ───────────────────────
+  // ── Health check ───────────────────────────────────────────────────────────
   app.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    const db = getDatabaseStatus();
+    res.json({
+      status: 'ok',
+      database: db.status,
+      databaseError: db.error,
+      timestamp: new Date().toISOString(),
+    });
   });
 
   // ── API v1 ────────────────────────────────────────────────────────────────────
