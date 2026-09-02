@@ -2,11 +2,12 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
+    "rootDir": "src",
     "composite": false,
     "incremental": false,
     "baseUrl": ".",
     "paths": {
-      "@sporgame/shared": ["../../packages/shared/src"]
+      "@sporgame/shared": ["../../packages/shared/dist"]
     }
   },
   "include": ["src"]
